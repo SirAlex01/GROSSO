@@ -1,6 +1,8 @@
 # G.R.O.S.S.O.
 **Gemini Recon & Orchestration System for Secure Operations**
 
+<img src="https://github.com/SirAlex01/GROSSO/blob/main/logo/grosso_logo.jpg" alt="GROSSO Auto Prompter" width="300"/>
+
 This project automates LLM prompting for all files in a challenge directory, enabling fast vulnerability analysis and exploit generation in Attack-Defense CTFs.
 
 > A `.env` file containing valid Gemini API keys is required to run this tool.
