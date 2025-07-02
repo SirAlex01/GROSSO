@@ -20,4 +20,8 @@ python3 auto_prompter.py -p PATH [-ms MAXSIZE] [-t TIMEOUT]
 
 - **PATH**: The path of the directory that contains the challenge's files (required)
 - **MAXSIZE**: Maximum size (in kilobytes) allowed for a single file to be included in the prompt (optional, default: 30 KB)  
-- **TIMEOUT**: Maximum time (in seconds) to wait for the first response. If timeout expires, script switches to another model (optional, default: 30 seconds)
+- **TIMEOUT**: Maximum time (in seconds) to wait for the first response. If timeout expires, script switches to another model (optional, default: 300 seconds)
+
+### Useful shortcuts for interactive chat:
+- **Esc + Enter**: Insert a newline in the prompt
+- **Ctrl + X**: Copy the code of the last generated exploit

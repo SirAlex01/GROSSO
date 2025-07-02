@@ -23,8 +23,8 @@ def parseArgs():
     parser.add_argument(
         '-t', '--timeout',
         type=int,
-        default=30,
-        help="Maximum timeout for first model's response (default: 30 seconds)"
+        default=300,
+        help="Maximum timeout for first model's response (default: 300 seconds)"
     )
 
     return parser.parse_args()

@@ -1,6 +1,7 @@
 from file_info import File
 from dotenv import load_dotenv
 import os
+import re
 
 def isExecutableFile(file: File) -> bool:
     return file.type in {
@@ -16,6 +17,8 @@ def shouldCollect(file: File, max_size: int) -> bool:
         return False
     if file.size > max_size:
         return False
+    if "/.git/" in file.name or "/.vscode/" in file.name:
+        return False
     if file.kind == 'text':
         return True
     if file.kind == 'binary' and isExecutableFile(file):
@@ -30,3 +33,11 @@ def collectApiKeys(num_api_keys):
         api_key_name = prefix + str(i)
         api_keys.append(os.getenv(api_key_name))
     return api_keys
+
+def extractExploitCode(gemini_response):
+    matches = re.findall(r"```python\s*(.*?)\s*```", gemini_response.text, re.DOTALL)
+    if matches:
+        exploit_code = matches[-1].strip()  # use the last match
+    else:
+        exploit_code = gemini_response.text.strip()  # fallback
+    return exploit_code

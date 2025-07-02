@@ -3,13 +3,13 @@ import random
 import logging
 import time
 import string
-import re
 import multiprocessing
+import pyperclip
 from rich.console import Console
-from rich.syntax import Syntax
 from rich.markdown import Markdown
 from prompt_toolkit import PromptSession
 from prompt_toolkit.key_binding import KeyBindings
+from utils import extractExploitCode
 
 COLOR_RESET = "\033[0m"
 COLORS = {
@@ -44,14 +44,18 @@ file_handler.setLevel(logging.ERROR)
 file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
 logger.addHandler(file_handler)
 
+exploit_code = None  # Global variable to hold latest exploit
 
 # Supported fallback models (most capable first)
 MODELS = ["models/gemini-2.5-flash", "models/gemini-2.0-flash"]
 
-CONTEXT_PROMPT = """You are a cybersecurity expert analyzing code for an Attack-Defense CTF competition.
+CONTEXT_PROMPT = """In Attack-Defense CTFs, teams are given identical vulnerable services running on their own servers.
+Each team must attack, exploiting vulnerabilities in other teams' services to steal flags (short strings/tokens) and defend, pathing vulnerabilities in their services while keeping them functional for the checker. 
+Vulnerabilities should not compromise the server's integrity, so DOS or RCE are useless in this context.
+Flags are stored in functional elements of the service, usually not in files stored on the server's machine.
+You are a cybersecurity expert analyzing code for an Attack-Defense CTF competition.
 Your task is to identify vulnerabilities and create exploits.
-Focus on common vulnerabilities like SQL injection, XSS, command injection, file inclusion, authentication bypasses, and logic flaws.
-Be precise and practical in your analysis."""
+Focus on server-side vulnerabilities like SQL injection, file inclusion (LFI/RFI), authentication bypasses, authorization flaws, insecure deserialization, path traversal, server-side template injection (SSTI), weak cryptographic implementations, hash length extension, unsigned cookies, XXE, server-side request forgery (SSRF), business logic flaws, and all the others I did not mention!"""
 
 VULNS_PROMPT = """Analyze all the provided files and list vulnerabilities found, ordered by easiness to exploit (easiest first).
 For each vulnerability, provide:
@@ -72,6 +76,7 @@ The exploit should:
 7. Insert the FULL python payload at the end of the response within ```python and ```. USE ONLY ONE SECTION WITH THE EXPLOIT CODE. NO OTHER python SECTION!
 8. ALWAYS gather ALL available flags ITERATING ON flag_ids ONE BY ONE LIKE IN THE TEMPLATES. DO NOT STOP AFTER ONE FLAG! IN GENERAL DO NOT CHANGE THEIR STRUCTURE.
 9. flag format is 32 printable characters, the last one is always =
+10. print the entire response to the requests getting the flag, do not try to match it as it would add unnecessary complications and we already have a flag extractor.
 
 Remember to use generate for any varying information which does not need to be fixed to obfuscate your exploit as much as possible.
 If CLI interactive communication is needed in the exploit, use pwntools rather than requests. 
@@ -167,24 +172,21 @@ def makePrompts(api_keys, history, timeout=10):
                     console.print(md)
                     console.print()
                 except Exception as ve:
-                    loggger.error(f"Timeout/error on VULNS [{model_name}] key #{idx + 1}: {str(ve)}")
+                    logger.error(f"Timeout/error on VULNS [{model_name}] key #{idx + 1}: {str(ve)}")
                     continue  # try next model
 
                 # === EXPLOIT without timeout ===
                 try:
                     response_exploit = chat.send_message(EXPLOIT_PROMPT)
-                    exploit_code = response_exploit.text.strip()
+                    response_text = response_exploit.text.strip()
 
-                    md = Markdown("**Gemini (Exploit)**:\n" + exploit_code, code_theme="one-dark")
+                    md = Markdown("**Gemini (Exploit)**:\n" + response_text, code_theme="one-dark")
                     console.print(md)
                     console.print()
 
-                    matches = re.findall(r"```python\s*(.*?)\s*```", response_exploit.text, re.DOTALL)
-                    if matches:
-                        exploit_code = matches[-1].strip()  # use the last match
-                    else:
-                        exploit_code = response_exploit.text.strip()  # fallback
-
+                    global exploit_code
+                    exploit_code = extractExploitCode(response_exploit)
+                    
                     rand_digits = "".join(random.choices(string.digits, k=6))
                     filename = f"exploit_{rand_digits}.py"
                     with open(filename, "w") as f:
@@ -243,6 +245,14 @@ def multiline_input(prompt="You: "):
     def _(event):
         event.app.current_buffer.insert_text('\n')
 
+    @bindings.add('c-x')  # Ctrl+X copies exploit code
+    def _(event):
+        global exploit_code
+        if exploit_code:
+            pyperclip.copy(exploit_code)
+        else:
+            logger.warning("No exploit code yet to copy.")
+
     return session.prompt(prompt, multiline=True, key_bindings=bindings)
 
 
@@ -259,10 +269,13 @@ def interactiveChat(chat):
 
             response = chat.send_message(user_input)
             response_text = response.text.strip() if response.text else "(No response text received)"
-
+            
             md = Markdown("**Gemini**: " + response_text, code_theme="one-dark")
             console.print(md)
             console.print()
+
+            global exploit_code
+            exploit_code = extractExploitCode(response)
 
         except (KeyboardInterrupt, EOFError):
             logger.info("Interrupted: exiting chat session.")
