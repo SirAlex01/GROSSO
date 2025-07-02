@@ -1,58 +1,55 @@
 #!/usr/bin/env python3
 import requests
-import json
+import os
 import sys
-import random
 import string
-from pwn import *
-from hashlib import sha256, sha1
+import random
+import re
+import json
+import hashlib
+from base64 import b64encode, b64decode
+
 from Crypto.Util.number import getPrime
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Util.number import inverse
 
+from pwn import *
+
 # ========================== CONFIG ==========================
-PORT = 5555
-SERVICE = 'CC-Manager'
-EXCLUDED_IDS= []
-USER_AGENT = None
-# USER_AGENT = 'CHECKER'
+PORT = 3000
+SERVICE = "XXX"
+BLACKLISTED_TEAMS = []
+USER_AGENT = "CHECKER"
 # ============================================================
 
-def generate(length=32):
-    return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(length))
+
+def generate(length=16, alphabet=string.ascii_letters + string.digits):
+    return "".join(random.choices(alphabet, k=length))
 
 
-addr = sys.argv[1]
+addr = sys.argv[1] if len(sys.argv) > 1 else "10.60.0.1"
 team_id = addr.split(".")[2]
 
-if int(team_id) in EXCLUDED_IDS:
-    print(f"Team ID {team_id} is excluded from the challenge.", flush=True)
-    sys.exit(0)
+if int(team_id) in BLACKLISTED_TEAMS:
+    exit()
 
-# URL setup
-URL = f'http://{addr}:{PORT}'
-FLAGID_URL = f'http://10.10.0.1:8081/flagIds?service={SERVICE}&team={team_id}'
-
-response = requests.get(FLAGID_URL)
-flag_ids = json.loads(response.text)[SERVICE][team_id]
+URL = f"http://{addr}:{PORT}"
+FLAGID_URL = "http://10.10.0.1:8081/flagIds"
+flag_ids = requests.get(FLAGID_URL, params={"service": SERVICE, "team": team_id}).json()
+flag_ids = flag_ids[SERVICE][team_id]
 
 
-for key, info in flag_ids.items():
-
-    username = info['username']
-
+def exploit():
     s = requests.Session()
-    if USER_AGENT:
-        s.headers.update({'User-Agent': USER_AGENT})
+    s.headers["User-Agent"] = USER_AGENT
 
-    usr = generate(10)
-    psw = generate(10)
 
-    #REMOVE NEXT LINES
-    r = s.post(URL + '/register', data={
-        'username': usr,
-        'password': psw
-    })
+for flag_id, flag_data in flag_ids.items():
+    exploits = [exploit]
 
-    print(r.text, flush=True)
+    for f in exploits:
+        try:
+            f(*flag_data.values())
+        except:
+            pass

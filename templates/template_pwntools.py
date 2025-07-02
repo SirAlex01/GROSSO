@@ -1,41 +1,52 @@
 #!/usr/bin/env python3
 import requests
-import json
+import os
 import sys
-import random
 import string
-from pwn import *
 import random
+import re
+import json
+import hashlib
+from base64 import b64encode, b64decode
 
+from Crypto.Util.number import getPrime
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
+from Crypto.Util.number import inverse
+
+from pwn import *
 
 # ========================== CONFIG ==========================
-PORT = 5555
-SERVICE = 'CC-Manager'
-EXCLUDED_IDS= []
+PORT = 3000
+SERVICE = "XXX"
+BLACKLISTED_TEAMS = []
 # ============================================================
 
-def generate(ln=32):
-    return ''.join(random.choice(string.ascii_letters + string.digits) for i in range(ln))
 
-addr = sys.argv[1]
-team_id= addr.split(".")[2]
-if int(team_id) in EXCLUDED_IDS:
-    print(f"Team ID {team_id} is excluded from the challenge.", flush=True)
-    sys.exit(0)
+def generate(length=16, alphabet=string.ascii_letters + string.digits):
+    return "".join(random.choices(alphabet, k=length))
 
-FLAGID_URL = 'http://10.10.0.1:8081/flagIds?service={}&team={}'.format(SERVICE,team_id)
-flag_ids = json.loads(requests.get(FLAGID_URL).text)
+
+addr = sys.argv[1] if len(sys.argv) > 1 else "10.60.0.1"
+team_id = addr.split(".")[2]
+
+if int(team_id) in BLACKLISTED_TEAMS:
+    exit()
+
+FLAGID_URL = "http://10.10.0.1:8081/flagIds"
+flag_ids = requests.get(FLAGID_URL, params={"service": SERVICE, "team": team_id}).json()
 flag_ids = flag_ids[SERVICE][team_id]
 
-r = remote(addr, PORT)
 
-for _round, info in flag_ids.items():
-    #Flag Ids Values:
-    username = info['username']
-    password = info['password']
+def exploit():
+    r = remote(addr, PORT)
 
-    r.recvline()
-    r.sendline(b"skib")
 
-    bru = r.recvline()
-    print(bru, flush=True)
+for flag_id, flag_data in flag_ids.items():
+    exploits = [exploit]
+
+    for f in exploits:
+        try:
+            f(*flag_data.values())
+        except:
+            pass
