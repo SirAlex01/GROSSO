@@ -269,4 +269,3 @@ def interactiveChat(chat):
             break
         except Exception as e:
             logger.error(f"Error during chat: {str(e)}")
-            print("An error occurred. Check the logs.")
