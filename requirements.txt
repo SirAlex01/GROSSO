@@ -1,2 +1,4 @@
 python-dotenv==1.1.0
 google-generativeai==0.8.5
+rich
+prompt_toolkit

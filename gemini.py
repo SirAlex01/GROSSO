@@ -5,19 +5,47 @@ import time
 import string
 import re
 import multiprocessing
+from rich.console import Console
+from rich.syntax import Syntax
+from rich.markdown import Markdown
+from prompt_toolkit import PromptSession
+from prompt_toolkit.key_binding import KeyBindings
+
+COLOR_RESET = "\033[0m"
+COLORS = {
+    "DEBUG": "\033[90m",  # Bright Black / Gray
+    "INFO": "\033[36m",  # Cyan (dark cyan)
+    "WARNING": "\033[33m",  # Yellow
+    "ERROR": "\033[31m",  # Red
+    "CRITICAL": "\033[1;31m",  # Bright Red
+}
+
+
+class ColoredFormatter(logging.Formatter):
+    def format(self, record):
+        levelname = record.levelname
+        color = COLORS.get(levelname, "")
+        record.levelname = f"{color}[{levelname}]{COLOR_RESET}"
+        return super().format(record)
+
+
+logger = logging.getLogger("GROSSO")
+logger.setLevel(logging.DEBUG)
+
+handler = logging.StreamHandler()
+handler.setLevel(logging.DEBUG)
+formatter = ColoredFormatter("%(levelname)s %(message)s")
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
 
 # Setup error logging
 logging.basicConfig(
-    filename="gemini_errors.log",
-    level=logging.ERROR,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    filename="gemini_errors.log", level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
 # Supported fallback models (most capable first)
-MODELS = [
-    "models/gemini-2.5-flash",
-    "models/gemini-2.0-flash"
-]
+MODELS = ["models/gemini-2.5-flash", "models/gemini-2.0-flash"]
 
 CONTEXT_PROMPT = """You are a cybersecurity expert analyzing code for an Attack-Defense CTF competition.
 Your task is to identify vulnerabilities and create exploits.
@@ -57,18 +85,20 @@ EXPLOIT_PROMPT += "\n\nTemplate for pwntools:\n"
 with open("templates/template_pwntools.py", "r") as f:
     EXPLOIT_PROMPT += f.read()
 
+
 def prepareHistory(file_data):
     history = [
+        {"role": "user", "parts": [{"text": CONTEXT_PROMPT}]},
         {
-            "role": "user",
-            "parts": [{"text": CONTEXT_PROMPT}]
+            "role": "model",
+            "parts": [
+                {
+                    "text": "I understand. I'm ready to analyze code for CTF vulnerabilities and create exploits. Please provide the files you'd like me to examine."
+                }
+            ],
         },
-        {
-            "role": "model", 
-            "parts": [{"text": "I understand. I'm ready to analyze code for CTF vulnerabilities and create exploits. Please provide the files you'd like me to examine."}]
-        }
     ]
-    
+
     # Add file contents to history with varied responses
     responses = [
         "Thank you for providing {}! I'm analyzing it for security issues.",
@@ -85,46 +115,46 @@ def prepareHistory(file_data):
         "Got it! {} is being scanned for vulnerabilities.",
         "File {} received. Checking for security holes.",
         "Perfect! {} loaded. Examining for exploitable weaknesses.",
-        "Thanks for providing {}. Analyzing for potential security issues."
+        "Thanks for providing {}. Analyzing for potential security issues.",
     ]
 
-    
     for i, (file_obj, content) in enumerate(file_data.items()):
-        print(f"[INFO] {file_obj} added to history")
-        history.extend([{
-            "role": "user",
-            "parts": [{"text": f"File: {file_obj.name}\n\n```\n{content}\n```"}]
-        },
-        {
-            "role": "model", 
-            "parts": [{"text": responses[i % len(responses)].format(file_obj.name)}]
-        }
-        ])
-    
+        logger.info(f"{file_obj} added to history")
+        history.extend(
+            [
+                {
+                    "role": "user",
+                    "parts": [{"text": f"File: {file_obj.name}\n\n```\n{content}\n```"}],
+                },
+                {
+                    "role": "model",
+                    "parts": [{"text": responses[i % len(responses)].format(file_obj.name)}],
+                },
+            ]
+        )
+
     return history
 
 
 def makePrompts(api_keys, history, timeout=10):
+    console = Console()
+
     for idx, key in enumerate(api_keys):
-        print(f"\n[INFO] Trying API key #{idx + 1}")
+        logger.info(f"Trying API key #{idx + 1}")
 
         try:
             genai.configure(api_key=key)
         except Exception as e:
-            logging.error(f"Failed to configure API key #{idx + 1}: {str(e)}")
+            logger.error(f"Failed to configure API key #{idx + 1}: {str(e)}")
             continue
 
         for model_name in MODELS:
-            print(f"[INFO] Trying model: {model_name} with API key #{idx + 1}")
+            logger.info(f"Trying model: {model_name} with API key #{idx + 1}")
 
             try:
                 gemini_model = genai.GenerativeModel(
                     model_name=model_name,
-                    generation_config=genai.types.GenerationConfig(
-                        temperature=0.2,
-                        top_p=1.0,
-                        top_k=1
-                    )
+                    generation_config=genai.types.GenerationConfig(temperature=0.2, top_p=1.0, top_k=1),
                 )
 
                 chat = gemini_model.start_chat(history=history)
@@ -132,7 +162,9 @@ def makePrompts(api_keys, history, timeout=10):
                 # === VULNERABILITIES with TIMEOUT ===
                 try:
                     response_vulns = sendWithTimeout(chat, VULNS_PROMPT, timeout)
-                    print("Gemini (vulnerabilities):", response_vulns.text.strip())
+                    md = Markdown("**Gemini (Vulnerabilities)**:\n" + response_vulns.text.strip())
+                    console.print(md)
+                    console.print()
                 except Exception as ve:
                     logging.error(f"Timeout/error on VULNS [{model_name}] key #{idx + 1}: {str(ve)}")
                     continue  # try next model
@@ -140,8 +172,11 @@ def makePrompts(api_keys, history, timeout=10):
                 # === EXPLOIT without timeout ===
                 try:
                     response_exploit = chat.send_message(EXPLOIT_PROMPT)
-                    exploit_code = response_exploit.text.strip()                    
-                    print("Gemini (exploit):", exploit_code)
+                    exploit_code = response_exploit.text.strip()
+
+                    md = Markdown("**Gemini (Exploit)**:\n" + exploit_code, code_theme="one-dark")
+                    console.print(md)
+                    console.print()
 
                     matches = re.findall(r"```python\s*(.*?)\s*```", response_exploit.text, re.DOTALL)
                     if matches:
@@ -149,23 +184,24 @@ def makePrompts(api_keys, history, timeout=10):
                     else:
                         exploit_code = response_exploit.text.strip()  # fallback
 
-                    rand_digits = ''.join(random.choices(string.digits, k=6))
+                    rand_digits = "".join(random.choices(string.digits, k=6))
                     filename = f"exploit_{rand_digits}.py"
                     with open(filename, "w") as f:
                         f.write(exploit_code)
-                    print(f"Gemini (exploit) saved to: {filename}")
+                    logger.info(f"Exploit saved to {filename}")
 
                 except Exception as ee:
-                    logging.error(f"Error on EXPLOIT [{model_name}] key #{idx + 1}: {str(ee)}")
+                    logger.error(f"Error on EXPLOIT [{model_name}] key #{idx + 1}: {str(ee)}")
                     continue  # try next model
 
                 return chat  # success
 
             except Exception as e:
-                logging.error(f"Model setup failed [{model_name}] key #{idx + 1}: {str(e)}")
+                logger.error(f"Model setup failed [{model_name}] key #{idx + 1}: {str(e)}")
                 time.sleep(1)
 
     raise RuntimeError("All API keys and models failed. See gemini_errors.log for details.")
+
 
 def sendMessageWorker(chat, message, return_dict):
     try:
@@ -193,21 +229,43 @@ def sendWithTimeout(chat, message, timeout_seconds):
 
     return return_dict["response"]
 
+
+def multiline_input(prompt="You: "):
+    session = PromptSession()
+    bindings = KeyBindings()
+
+    @bindings.add('enter')
+    def _(event):
+        event.app.exit(result=event.app.current_buffer.text)
+
+    @bindings.add('escape', 'enter')
+    def _(event):
+        event.app.current_buffer.insert_text('\n')
+
+    return session.prompt(prompt, multiline=True, key_bindings=bindings)
+
+
 def interactiveChat(chat):
-    print("---- Enter interactive mode. Type 'exit' or 'quit' to leave. ----")
+    console = Console()
+    print(f"{COLORS.get('INFO')}---- Enter interactive mode. Type 'exit' or 'quit' to leave. ----{COLOR_RESET}")
     while True:
         try:
-            user_input = input("You: ")
-            if user_input.lower().strip() in {"exit", "quit"}:
+            user_input = multiline_input("You: ").strip()
+            if user_input.lower() in {"exit", "quit"}:
                 print("-------------------------------------------------------------------")
                 print("Exiting chat session. Goodbye!")
                 break
 
             response = chat.send_message(user_input)
-            print("Gemini:", response.text.strip() if response.text else "(No response text received)")
-        except KeyboardInterrupt:
-            print("\n[Interrupted] Exiting chat session.")
+            response_text = response.text.strip() if response.text else "(No response text received)"
+
+            md = Markdown("**Gemini**: " + response_text, code_theme="one-dark")
+            console.print(md)
+            console.print()
+
+        except (KeyboardInterrupt, EOFError):
+            logger.info("Interrupted: exiting chat session.")
             break
         except Exception as e:
-            logging.error(f"Error during chat: {str(e)}")
+            logger.error(f"Error during chat: {str(e)}")
             print("An error occurred. Check the logs.")
