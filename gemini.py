@@ -167,7 +167,7 @@ def makePrompts(api_keys, history, timeout=10):
                     console.print(md)
                     console.print()
                 except Exception as ve:
-                    logging.error(f"Timeout/error on VULNS [{model_name}] key #{idx + 1}: {str(ve)}")
+                    loggger.error(f"Timeout/error on VULNS [{model_name}] key #{idx + 1}: {str(ve)}")
                     continue  # try next model
 
                 # === EXPLOIT without timeout ===
