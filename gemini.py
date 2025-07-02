@@ -37,12 +37,13 @@ handler.setLevel(logging.DEBUG)
 formatter = ColoredFormatter("%(levelname)s %(message)s")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+logger.propagate = False
 
+file_handler = logging.FileHandler("gemini_errors.log")
+file_handler.setLevel(logging.ERROR)
+file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+logger.addHandler(file_handler)
 
-# Setup error logging
-logging.basicConfig(
-    filename="gemini_errors.log", level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s"
-)
 
 # Supported fallback models (most capable first)
 MODELS = ["models/gemini-2.5-flash", "models/gemini-2.0-flash"]
