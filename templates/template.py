@@ -21,6 +21,7 @@ PORT = 3000
 SERVICE = "XXX"
 BLACKLISTED_TEAMS = []
 USER_AGENT = "CHECKER"
+ACCEPT_ENCODING = "gzip, deflate, zstd"
 # ============================================================
 
 
@@ -42,14 +43,13 @@ flag_ids = flag_ids[SERVICE][team_id]
 
 def exploit():
     s = requests.Session()
-    s.headers["User-Agent"] = USER_AGENT
+    s.headers.update({"User-Agent": USER_AGENT, "Accept-Encoding": ACCEPT_ENCODING})
 
 
 for flag_id, flag_data in flag_ids.items():
-    exploits = [exploit]
-
-    for f in exploits:
-        try:
-            f(*flag_data.values())
-        except:
-            pass
+    try:
+        exploit(*flag_data.values())
+    except KeyboardInterrupt:
+        exit()
+    except:
+        pass

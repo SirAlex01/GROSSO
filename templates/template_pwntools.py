@@ -43,10 +43,9 @@ def exploit():
 
 
 for flag_id, flag_data in flag_ids.items():
-    exploits = [exploit]
-
-    for f in exploits:
-        try:
-            f(*flag_data.values())
-        except:
-            pass
+    try:
+        exploit(*flag_data.values())
+    except KeyboardInterrupt:
+        exit()
+    except:
+        pass
