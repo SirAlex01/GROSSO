@@ -31,7 +31,9 @@ def collectApiKeys(num_api_keys):
     api_keys = []
     for i in range(1, num_api_keys+1):
         api_key_name = prefix + str(i)
-        api_keys.append(os.getenv(api_key_name))
+        api_key = os.getenv(api_key_name)
+        if api_key:
+            api_keys.append(api_key)
     return api_keys
 
 def extractExploitCode(gemini_response):

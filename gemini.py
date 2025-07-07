@@ -144,6 +144,7 @@ def prepareHistory(file_data):
 
 def makePrompts(api_keys, history, timeout=10):
     console = Console()
+    random.shuffle(api_keys) # do not always start from the same key
 
     for idx, key in enumerate(api_keys):
         logger.info(f"Trying API key #{idx + 1}")
